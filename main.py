@@ -200,7 +200,7 @@ class Application:
 	def img_save(self):
 		fp= filedialog.asksaveasfilename(defaultextension='.png', filetypes=[('PNG', '*.png'), ('JPEG', '*.jpg'), ('BMP', '*.bmp')])
 		if fp:
-			self.img2.save(fp)
+			cv2.imwrite(fp, cv2.cvtColor(self.img2, cv2.COLOR_RGB2BGR))
 			print(f'[INFO]: Image saved to {fp}')
 		else:
 			print('[INFO]: Save image cancelled.')
@@ -212,6 +212,7 @@ class Application:
 		self.f_l_img2.config(image='', text='No Image Loaded')
 		self.mb_file.entryconfig('Save image',  state=tk.DISABLED)
 		self.mb_file.entryconfig('Close image', state=tk.DISABLED)
+		print('[INFO]: Image Cleared.')
 
 if __name__=='__main__':
 	root= tk.Tk()
