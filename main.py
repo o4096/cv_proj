@@ -103,38 +103,49 @@ class Application:
 		self.mb.add_cascade(label='Help', menu=self.mb_about)
 		self.root.config(menu=self.mb)
 
-		self.f_l=      tk.Frame(self.root)
-		self.f_l_img1= tk.Label(self.f_l, text='No Image Loaded')
-		self.f_l_img2= tk.Label(self.f_l, text='')
+		self.f_l=     tk.Frame(self.root)
+		self.f_l_img= tk.Label(self.f_l, text='No Image Loaded')
 
-		self.f_l.pack(side='left', expand=1, fill='none')
+		self.f_l.pack(side='left', expand=1, fill='none', padx=0, pady=0)
 		self.f_l.place(x=0, y=0)
-		self.f_l_img1.pack(side='top', expand=1, fill='both')
-		self.f_l_img2.pack(side='top', expand=1, fill='both')
+		self.f_l_img.pack(side='top', expand=1, padx=0, pady=0)
 
 		self.f_r= tk.Frame(self.root)
+
 		self.f_r.pack(side=tk.RIGHT, fill=tk.BOTH, padx=2, pady=2)
 		# self.fltr_var=  tk.Variable(value=list(self.filters.keys()))
 		self.fltr_var=  tk.Variable(value=self.filters)
 		self.fltr_list_title= tk.Label(self.f_r, text='Available Functions', justify=tk.LEFT)
 		self.fltr_list_title.pack()
-		self.fltr_list= tk.Listbox(self.f_r, selectmode=tk.MULTIPLE, listvariable=self.fltr_var)
+		self.fltr_list= tk.Listbox(self.f_r, selectmode=tk.MULTIPLE, listvariable=self.fltr_var, state='disabled')
 		self.fltr_list.pack(pady=5, padx=5, fill=tk.BOTH, expand=True)
 		self.fltr_list.bind('<<ListboxSelect>>', self.fltr_select)
+
+		self.hb= tk.Button(self.f_r, text='Show Original', command=self.img_showorigin, state='disabled', )
+		self.hb.pack()
+		self.hb.bind('<ButtonPress-1>',   self.holdbutton_active)
+		self.hb.bind('<ButtonRelease-1>', self.holdbutton_inactive)
+		self.hb_active= False
 
 		self.fltr_params_title= tk.Label(self.f_r, text='Parameters', justify=tk.LEFT)
 		self.fltr_params_title.pack()
 		self.fltr_params= tk.Frame(self.f_r)
 		self.fltr_params.pack(pady=5, padx=5, fill=tk.BOTH, expand=True)
 
+	def _set_image(self, image):
+		if image is None:
+			return
+		img_tk= ImageTk.PhotoImage(Image.fromarray(image))
+		# img_pl.thumbnail((400, 400)) #stupid apis
+		self.f_l_img.config(image=img_tk, text='', width=self.img1.shape[1], height=self.img1.shape[0])
+		self.f_l_img.image= img_tk
+
 	def fltr_select(self, _event):
 		idxs= self.fltr_list.curselection()
 		if len(idxs)>0:
 			fltrs= [self.fltr_list.get(i) for i in idxs]
 			print('[INFO]: Selected filters:', fltrs)
-
 			src= self.img1 if len(idxs)==1 else self.img2 #filter chaining
-
 			for fltr in fltrs:
 				if fltr in self.filters:
 					print(f'[INFO]: Applying filter: {fltr}')
@@ -169,22 +180,26 @@ class Application:
 
 	def render(self):
 		if self.img1 is None:
-			self.f_l_img1.config(image='', text='No Image Loaded')
+			self.f_l_img.config(image='', text='No Image Loaded')
 		else:
-			img_pl= Image.fromarray(self.img1)
-			img_pl.thumbnail((400, 400)) #stupid apis
-			img_tk= ImageTk.PhotoImage(img_pl)
-			self.f_l_img1.config(image=img_tk, text='', width=self.img1.shape[1], height=self.img1.shape[0])
-			self.f_l_img1.image= img_tk
+			self._set_image(self.img2 if len(self.filters)>0 else self.img1)
+		
+	def holdbutton_active(self, event):
+		self.hb_active= True
+		self.hb.config(relief=tk.SUNKEN)
+		self._set_image(self.img1)
 
-		if self.img2 is None:
-			self.f_l_img2.config(image='', text='No Image Loaded')
+	def holdbutton_inactive(self, event):
+		self.hb_active= False
+		self.hb.config(relief=tk.RAISED)
+		self.render()
+
+	def img_showorigin(self):
+		if self.hb_active:
+			print("Button is held down!")
+			self.root.after(100, self.img_showorigin)  # Adjust the delay as needed
 		else:
-			img_pl= Image.fromarray(self.img2)
-			img_pl.thumbnail((400, 400))
-			img_tk= ImageTk.PhotoImage(img_pl)
-			self.f_l_img2.config(image=img_tk, text='', width=self.img2.shape[1], height=self.img2.shape[0])
-			self.f_l_img2.image= img_tk
+			self.render()
 
 	def img_load(self):
 		self.img_clear()
@@ -194,7 +209,8 @@ class Application:
 			self.img2= self.img1.copy()
 			self.mb_file.entryconfig('Save image',  state=tk.NORMAL)
 			self.mb_file.entryconfig('Close image', state=tk.NORMAL)
-			
+			self.fltr_list.config(state='normal')
+			self.hb.config(state='normal')
 			self.render()
 
 	def img_save(self):
@@ -208,10 +224,12 @@ class Application:
 	def img_clear(self):
 		self.img1= None
 		self.img2= None
-		self.f_l_img1.config(image='', text='No Image Loaded')
-		self.f_l_img2.config(image='', text='No Image Loaded')
-		self.mb_file.entryconfig('Save image',  state=tk.DISABLED)
-		self.mb_file.entryconfig('Close image', state=tk.DISABLED)
+		self.f_l_img.config(image='', text='No Image Loaded')
+		self.f_l_img.image= None
+		self.mb_file.entryconfig('Save image',  state='disabled')
+		self.mb_file.entryconfig('Close image', state='disabled')
+		self.fltr_list.config(state='disabled')
+		self.hb.config(state='disabled')
 		print('[INFO]: Image Cleared.')
 
 if __name__=='__main__':
