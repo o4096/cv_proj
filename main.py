@@ -1,63 +1,10 @@
 import cv2
+import joblib
 import numpy   as np
 import tkinter as tk
 from   tkinter import filedialog, messagebox
 from   PIL     import Image, ImageTk
-
-class ImageProcessor:
-	# def __init__(self):
-	# 	pass
-
-	@staticmethod
-	def normalize(image):
-		# return cv2.normalize(image, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-		mini= np.min(image)
-		diff= np.max(image)-mini
-		if diff==0:
-			print('[INFO]: Image already normalized.')
-			return image
-		return (((image-mini)/diff)*255).astype(np.uint8)
-	
-	@staticmethod
-	def resize(image, size=(100, 100), interpolation=cv2.INTER_AREA):
-		return cv2.resize(image, size, interpolation=interpolation)
-
-	@staticmethod
-	def sharpen(image):
-		return cv2.filter2D(image, -1, np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
-	
-	@staticmethod
-	def gaussian_blur(image, kernel_size=(5, 5), sigma=1):
-		return cv2.GaussianBlur(image, kernel_size, sigma)
-		# return image.filter(ImageFilter.GaussianBlur(radius=sigma))
-	
-	@staticmethod
-	def gaussian_pyramid(image, levels=3):
-		gaussian_pyramid= [image]
-		for i in range(levels-1):
-			image= cv2.pyrDown(image)
-			# image= image.filter(ImageFilter.GaussianBlur(radius=2**i))
-			gaussian_pyramid.append(image)
-		return gaussian_pyramid
-	
-	@staticmethod
-	def laplacian_pyramid(image, levels=3):
-		pass
-		# laplacian_pyramid= []
-		# gaussian_pyramid= ImageProcessor.gaussian_pyramid(image, levels)
-		# for i in range(levels-1):
-		# 	laplacian= gaussian_pyramid[i].filter(ImageFilter.GaussianBlur(radius=2**i))
-		# 	laplacian= ImageChops.subtract(gaussian_pyramid[i], laplacian)
-		# 	laplacian_pyramid.append(laplacian)
-		# return laplacian_pyramid
-
-	@staticmethod
-	def edge_detection(image, threshold1=100, threshold2=200):
-		return cv2.Canny(image, threshold1, threshold2)
-	
-	@staticmethod
-	def object_detect(image):#TODO: Implement object detection
-		return image
+from   skimage.feature import hog
 
 class Application:
 	def __init__(self, root):
@@ -66,27 +13,14 @@ class Application:
 		self.root.geometry('800x600')
 		self.img1= None
 		self.img2= None
-
-		'''#Polymorphism would complicate things, cause I want to tweak the params of each filter :')
-		self.filters= {
-			'Sharpen':          ImageProcessor.sharpen,
-			'Gaussian Blur':    ImageProcessor.gaussian_blur,
-			'Edge Detection':   ImageProcessor.edge_detection,
-			'Normalize':        None,
-			'Resize':           None,
-			'Color Space':      None,
-			'SIFT':             None,
-			'Harris Corner':    None,
-			'OTSU':             None,
-			'Object Detection': ImageProcessor.object_detect,
-		}'''
+		self.model= joblib.load('svm_model.pkl')
 		self.filters= [
+			'Normalize', 'Grayscale', 
 			'Sharpen', 'Gaussian Blur',
 			'Edge Detection', 'Object Detection',
-			'Normalize',
-			# 'Resize',
-			'Color Space', 
+			# 'Resize', #introduces complications
 			'SIFT', 'Harris Corner', 'OTSU',
+			'Gaussian Pyramid', 'Laplacian Pyramid',
 		]
 
 		self.mb= tk.Menu(self.root) #menu bar construct
@@ -112,25 +46,34 @@ class Application:
 
 		self.f_r= tk.Frame(self.root)
 
-		self.f_r.pack(side=tk.RIGHT, fill=tk.BOTH, padx=2, pady=2)
-		# self.fltr_var=  tk.Variable(value=list(self.filters.keys()))
+		self.f_r.pack(side=tk.RIGHT, fill='both', padx=2, pady=2)
 		self.fltr_var=  tk.Variable(value=self.filters)
-		self.fltr_list_title= tk.Label(self.f_r, text='Available Functions', justify=tk.LEFT)
+		self.fltr_list_title= tk.Label(self.f_r, text='Available Functions', justify='left')
 		self.fltr_list_title.pack()
-		self.fltr_list= tk.Listbox(self.f_r, selectmode=tk.MULTIPLE, listvariable=self.fltr_var, state='disabled')
-		self.fltr_list.pack(pady=5, padx=5, fill=tk.BOTH, expand=True)
+		self.fltr_list= tk.Listbox(self.f_r, selectmode='single', listvariable=self.fltr_var, state='disabled')
+		self.fltr_list.pack(pady=5, padx=5, fill='both', expand=1)
 		self.fltr_list.bind('<<ListboxSelect>>', self.fltr_select)
 
-		self.hb= tk.Button(self.f_r, text='Show Original', command=self.img_showorigin, state='disabled', )
+		self.rb= tk.Button(self.f_r, text='Revert Original', command=self.img_rvrtorigin, state='disabled')
+		self.rb.pack()
+		self.hb= tk.Button(self.f_r, text='Show Original',   command=self.img_showorigin, state='disabled')
 		self.hb.pack()
 		self.hb.bind('<ButtonPress-1>',   self.holdbutton_active)
 		self.hb.bind('<ButtonRelease-1>', self.holdbutton_inactive)
 		self.hb_active= False
 
-		self.fltr_params_title= tk.Label(self.f_r, text='Parameters', justify=tk.LEFT)
+		self.fltr_params_title= tk.Label(self.f_r, text='Parameters', justify='left')
 		self.fltr_params_title.pack()
 		self.fltr_params= tk.Frame(self.f_r)
-		self.fltr_params.pack(pady=5, padx=5, fill=tk.BOTH, expand=True)
+		self.fltr_params.pack(pady=5, padx=5, fill='both', expand=1)
+
+		self.param_sharpness= tk.DoubleVar(value=1.0)
+		self.param_blur=      tk.DoubleVar(value=1.0)
+		self.param_canny_thresh1= tk.IntVar(value=100)
+		self.param_canny_thresh2= tk.IntVar(value=200)
+		
+		self.applyb= tk.Button(self.f_r, text='Apply', command=self.fltr_apply, state='disabled')
+		self.applyb.pack(side='bottom')
 
 	def _set_image(self, image):
 		if image is None:
@@ -140,44 +83,116 @@ class Application:
 		self.f_l_img.config(image=img_tk, text='', width=self.img1.shape[1], height=self.img1.shape[0])
 		self.f_l_img.image= img_tk
 
+	def clear_frame(self, frame:tk.Frame):
+		for widget in frame.winfo_children():
+			widget.destroy()
+
+	def fltr_apply(self):
+		idxs= self.fltr_list.curselection()
+		if len(idxs)>0:
+			filter= self.fltr_list.get(idxs[0])
+			if filter not in self.filters:
+				print(f'[INFO]: Filter {filter} not found.')
+				return
+			
+			print('[INFO]: Applying filter:', filter)
+			if   filter=='Sharpen':
+				self.img2= cv2.filter2D(self.img2, -1, self.param_sharpness.get()*np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
+			elif filter=='Gaussian Blur':
+				self.img2= cv2.GaussianBlur(self.img2, (5, 5), self.param_blur.get())
+			elif filter=='Edge Detection':
+				self.img2= cv2.Canny(self.img2, threshold1=100, threshold2=200)
+			elif filter=='Normalize':
+				mini= np.min(self.img2)
+				diff= np.max(self.img2)-mini
+				if diff==0:
+					print('[INFO]: Blank Image! Nothing to normalize.')
+					return
+				self.img2= (((self.img2-mini)/diff)*255).astype(np.uint8)
+			elif filter=='Grayscale':
+				self.img2= cv2.cvtColor(self.img2, cv2.COLOR_RGB2GRAY)
+			elif filter=='SIFT':
+				if len(self.img2.shape)==3:
+					gray= cv2.cvtColor(self.img2, cv2.COLOR_RGB2GRAY)
+				else:
+					gray= self.img2
+				sift= cv2.xfeatures2d.SIFT_create()
+				keypoints, descriptors= sift.detectAndCompute(gray, None)
+				self.img2= cv2.drawKeypoints(self.img2, keypoints, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+			elif filter=='Harris Corner': #TODO
+				self.img2= cv2.cornerHarris(self.img2, blockSize=2, ksize=3, k=0.04)
+			elif filter=='OTSU': #TODO
+				self.img2= cv2.threshold(self.img2, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+			elif filter=='Object Detection': #TODO REVISE THIS!!!
+				image= cv2.resize(self.img2, (64, 64))
+				image= cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+				image= cv2.GaussianBlur(image, (3, 3), 0)
+				clahe= cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+				image= clahe.apply(image)
+				_, thresh= cv2.threshold(image, 0, 255, cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
+				kernel= np.ones((5, 5), np.uint8)
+				morph= cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+				contours, _= cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+				if contours:
+					largest_contour= max(contours, key=cv2.contourArea)
+					x, y, w, h= cv2.boundingRect(largest_contour)
+					image= image[y:y+h, x:x+w]
+					self.img2= cv2.drawContours(image, [largest_contour], -1, (0, 255, 0), 2)
+
+				if len(image.shape)==3:
+					image= cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+				
+				feat= hog(
+					image, orientations=9,
+					pixels_per_cell=(8, 8),
+					cells_per_block=(2, 2),
+					visualize=False, channel_axis=None
+				)
+				if feat.size!=489:
+					if feat.size>489:
+						feat= feat[:489]
+					else:
+						feat= np.pad(feat, (0, 489-feat.size), 'constant')
+
+				# feat= pca.fit_transform(feat.reshape(1, -1))
+				pred= self.model.predict(feat.reshape(1, -1))
+				print(pred)
+			else:
+				return
+
+			self.render()
+
 	def fltr_select(self, _event):
 		idxs= self.fltr_list.curselection()
 		if len(idxs)>0:
-			fltrs= [self.fltr_list.get(i) for i in idxs]
-			print('[INFO]: Selected filters:', fltrs)
-			src= self.img1 if len(idxs)==1 else self.img2 #filter chaining
-			for fltr in fltrs:
-				if fltr in self.filters:
-					print(f'[INFO]: Applying filter: {fltr}')
-					if   fltr=='Sharpen':
-						self.img2= ImageProcessor.sharpen(src)
-					elif fltr=='Gaussian Blur':
-						self.img2= ImageProcessor.gaussian_blur(src, kernel_size=(5, 5), sigma=1)
-					elif fltr=='Edge Detection':
-						self.img2= ImageProcessor.edge_detection(src, threshold1=100, threshold2=200)
-					elif fltr=='Normalize':
-						self.img2= ImageProcessor.normalize(src)
-					# elif fltr=='Resize':
-					# 	self.img2= ImageProcessor.resize(src)
-					elif fltr=='Color Space':
-						self.img2= cv2.cvtColor(src, cv2.COLOR_BGR2GRAY)
-					elif fltr=='SIFT':
-						self.img2= cv2.SIFT_create().detectAndCompute(src, None)[0]#TODO
-					elif fltr=='Harris Corner':
-						self.img2= cv2.cornerHarris(src, blockSize=2, ksize=3, k=0.04)#TODO
-					elif fltr=='OTSU':
-						self.img2= cv2.threshold(src, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]#TODO
-					elif fltr=='Object Detection':
-						self.img2= ImageProcessor.object_detect(src)#TODO
-					else:
-						print(f'[INFO]: Filter {fltr} not implemented.')
-				else:
-					print(f'[INFO]: Filter {fltr} not found.')
-		else:
-			self.img2= self.img1
-			print('[INFO]: No filters selected.')
-		self.render()
+			filter= self.fltr_list.get(idxs[0])
+			if filter not in self.filters:
+				print(f'[INFO]: Filter {filter} not found.')
+				return
 
+			self.clear_frame(self.fltr_params)
+			self.applyb.config(state='normal')
+			if   filter=='Sharpen':
+				tk.Scale(self.fltr_params, from_=0.1, to=2, resolution=0.1, orient='horizontal', label='Sharpening Factor', variable=self.param_sharpness).pack()
+			elif filter=='Gaussian Blur':
+				tk.Scale(self.fltr_params, from_=0.1, to=10, resolution=0.1, orient='horizontal', label='Sigma', variable=self.param_blur).pack()
+			elif filter=='Edge Detection':
+				tk.Scale(self.fltr_params, from_=1, to=254, resolution=1, orient='horizontal', label='Threshold1', variable=self.param_canny_thresh1).pack()
+				tk.Scale(self.fltr_params, from_=1, to=254, resolution=1, orient='horizontal', label='Threshold2', variable=self.param_canny_thresh2).pack()
+			elif filter=='Normalize': pass #no params
+			elif filter=='Grayscale': pass #no params
+			elif filter=='SIFT':
+				pass #TODO
+			elif filter=='Harris Corner':
+				pass #TODO
+			elif filter=='OTSU':
+				pass #TODO: segments the image
+			elif filter=='Object Detection':
+				pass #TODO: should draw bounding box around detected objects and show their class
+			else:
+				self.applyb.config(state='disabled')
+				print(f'[INFO]: Filter {filter} not implemented.')
+	
 	def render(self):
 		if self.img1 is None:
 			self.f_l_img.config(image='', text='No Image Loaded')
@@ -186,18 +201,21 @@ class Application:
 		
 	def holdbutton_active(self, event):
 		self.hb_active= True
-		self.hb.config(relief=tk.SUNKEN)
+		self.hb.config(relief='sunken')
 		self._set_image(self.img1)
 
 	def holdbutton_inactive(self, event):
 		self.hb_active= False
-		self.hb.config(relief=tk.RAISED)
+		self.hb.config(relief='raised')
+		self.render()
+
+	def img_rvrtorigin(self):
+		self.img2= self.img1.copy()
 		self.render()
 
 	def img_showorigin(self):
 		if self.hb_active:
-			print("Button is held down!")
-			self.root.after(100, self.img_showorigin)  # Adjust the delay as needed
+			self.root.after(100, self.img_showorigin)
 		else:
 			self.render()
 
@@ -207,9 +225,10 @@ class Application:
 		if fp:
 			self.img1= cv2.cvtColor(cv2.imread(fp), cv2.COLOR_BGR2RGB)
 			self.img2= self.img1.copy()
-			self.mb_file.entryconfig('Save image',  state=tk.NORMAL)
-			self.mb_file.entryconfig('Close image', state=tk.NORMAL)
+			self.mb_file.entryconfig('Save image',  state='normal')
+			self.mb_file.entryconfig('Close image', state='normal')
 			self.fltr_list.config(state='normal')
+			self.rb.config(state='normal')
 			self.hb.config(state='normal')
 			self.render()
 
@@ -229,7 +248,9 @@ class Application:
 		self.mb_file.entryconfig('Save image',  state='disabled')
 		self.mb_file.entryconfig('Close image', state='disabled')
 		self.fltr_list.config(state='disabled')
+		self.rb.config(state='disabled')
 		self.hb.config(state='disabled')
+		self.applyb.config(state='disabled')
 		print('[INFO]: Image Cleared.')
 
 if __name__=='__main__':
