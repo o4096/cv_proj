@@ -25,6 +25,7 @@ class Application:
 			'Edge Detection',
 			'Detection w/SIFT',
 			'SIFT keypoints',
+			'Harris Corner Detector',
 		]
 
 	# INIT UI ELEMENTS (order doesn't affect element position)
@@ -136,6 +137,8 @@ class Application:
 					if len(matches)>20:
 						img= cv2.drawMatches(img, keypoints1, obj_img, keypoints2, matches[:20], None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
 						img= cv2.putText(img, obj_image, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+			elif filter=='Harris Corner Detector':
+				pass #TODO: detects all corner points in the image
 			else:
 				return
 
