@@ -1,6 +1,7 @@
 import os, cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter     import filedialog
 from tkinter     import *
@@ -33,14 +34,21 @@ class Application:
 			'Normalize', 'Grayscale',
 			'Sharpen', 'Gaussian Blur',
 			'Hist Equalization',
+			'Hist Equalization',
 			'Edge Detection',
+			'Corner Detection', #Harris
 			'Corner Detection', #Harris
 			'SIFT keypoints',
 			'OTSU Threshold',
 			'Detection w/SIFT',
 			'Detection w/CNN',
 			'Kmeans Clustering',
+			'OTSU Threshold',
+			'Detection w/SIFT',
+			'Detection w/CNN',
+			'Kmeans Clustering',
 		]
+		self.model= load_model('chess.keras')
 
 	# INIT UI ELEMENTS (order doesn't affect element position)
 		self.canvas=            Canvas(root, bg='gray')
@@ -73,6 +81,9 @@ class Application:
 		self.param_harris_bsize=  IntVar(value=2)
 		self.param_harris_ksize=  IntVar(value=3)
 		self.param_harris_k=      DoubleVar(value=0.04)
+		self.param_otsu_thresh=   DoubleVar(value=0)
+		self.param_otsu_max=      DoubleVar(value=255)
+		self.param_kmeans_k=      IntVar(value=2)
 		self.param_otsu_thresh=   DoubleVar(value=0)
 		self.param_otsu_max=      DoubleVar(value=255)
 		self.param_kmeans_k=      IntVar(value=2)
@@ -129,7 +140,16 @@ class Application:
 			elif filter=='Hist Equalization':
 				r, g, b= cv2.split(img)
 				img= cv2.merge((cv2.equalizeHist(r), cv2.equalizeHist(g), cv2.equalizeHist(b)))
+			if   filter=='Sharpen':           img= cv2.filter2D(img, -1, self.param_sharpness.get()*np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
+			elif filter=='Gaussian Blur':     img= cv2.GaussianBlur(img, (5, 5), self.param_blur.get())
+			elif filter=='Edge Detection':    img= cv2.Canny(img, threshold1=self.param_canny_thresh1.get(), threshold2=self.param_canny_thresh2.get())
+			elif filter=='Normalize':         img= self.fltr_normalize(img)
+			elif filter=='Grayscale':         img= self.fltr_grayscale(img)
+			elif filter=='Hist Equalization':
+				r, g, b= cv2.split(img)
+				img= cv2.merge((cv2.equalizeHist(r), cv2.equalizeHist(g), cv2.equalizeHist(b)))
 			elif filter=='SIFT keypoints':
+				gray= self.fltr_grayscale(img)
 				gray= self.fltr_grayscale(img)
 				sift= cv2.xfeatures2d.SIFT_create()
 				keypoints, descriptors= sift.detectAndCompute(gray, None)
@@ -145,7 +165,19 @@ class Application:
 				threshold= 0.01*harris_response.max()
 				if len(img.shape)==3: img[dilated_corners>threshold]= [0, 255, 0]# Mark corners in green
 				else:                 img[dilated_corners>threshold]= 255
+			elif filter=='OTSU Threshold':
+				gray= self.fltr_grayscale(img)
+				f, thresh= cv2.threshold(gray, self.param_otsu_thresh.get(), self.param_otsu_max.get(), cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+				img= thresh
+			elif filter=='Corner Detection':
+				gray= self.fltr_grayscale(img)
+				harris_response= cv2.cornerHarris(gray, self.param_harris_bsize.get(), self.param_harris_ksize.get(), self.param_harris_k.get())
+				dilated_corners= cv2.dilate(harris_response, None)
+				threshold= 0.01*harris_response.max()
+				if len(img.shape)==3: img[dilated_corners>threshold]= [0, 255, 0]# Mark corners in green
+				else:                 img[dilated_corners>threshold]= 255
 			elif filter=='Detection w/SIFT':
+				scn_img= self.fltr_grayscale(img)
 				scn_img= self.fltr_grayscale(img)
 				for obj_image in os.listdir('objects'):
 					obj_img= cv2.imread(os.path.join('objects', obj_image))
@@ -170,9 +202,9 @@ class Application:
 					# points_obj= np.zeros((len(matches), 2), dtype=np.float32)
 					# points_scn= np.zeros((len(matches), 2), dtype=np.float32)
 
-					# for i, match in enumerate(matches):
-					# 	points_obj[i, :]= keypoints1[match.queryIdx].pt
-					# 	points_scn[i, :]= keypoints2[match.trainIdx].pt
+					for i, match in enumerate(matches):
+						points_obj[i, :]= keypoints1[match.queryIdx].pt
+						points_scn[i, :]= keypoints2[match.trainIdx].pt
 
 					# H, mask= cv2.findHomography(points_obj, points_scn, cv2.RANSAC)
 
@@ -270,13 +302,16 @@ class Application:
 			self.applyb.config(state=NORMAL)
 			if   filter=='Sharpen':
 				tk.Scale(self.fltr_params, label='Sharpness', from_=0.1, to=10, resolution=0.1, orient='horizontal', variable=self.param_sharpness).pack()
+				tk.Scale(self.fltr_params, label='Sharpness', from_=0.1, to=10, resolution=0.1, orient='horizontal', variable=self.param_sharpness).pack()
 			elif filter=='Gaussian Blur':
+				tk.Scale(self.fltr_params, label='Sigma', from_=0.1, to=100, resolution=0.1, orient='horizontal', variable=self.param_blur).pack()
 				tk.Scale(self.fltr_params, label='Sigma', from_=0.1, to=100, resolution=0.1, orient='horizontal', variable=self.param_blur).pack()
 			elif filter=='Edge Detection':
 				tk.Scale(self.fltr_params, label='Thresh1', from_=0, to=512, orient='horizontal', variable=self.param_canny_thresh1).pack()
 				tk.Scale(self.fltr_params, label='Thresh2', from_=0, to=512, orient='horizontal', variable=self.param_canny_thresh2).pack()
 			elif filter=='Normalize':        pass #no params
 			elif filter=='Grayscale':        pass #no params
+			elif filter=='SIFT keypoints':   pass #no params
 			elif filter=='SIFT keypoints':   pass #no params
 			elif filter=='SIFT keypoints':   pass #no params
 			elif filter=='Detection w/SIFT': pass #no params (use objects folder for reference object images)
@@ -288,7 +323,16 @@ class Application:
 			elif filter=='Kmeans Clustering':
 				tk.Scale(self.fltr_params, label='K', from_=1, to=10, orient='horizontal', variable=self.param_kmeans_k).pack()
 			elif filter=='Corner Detection':
+			elif filter=='OTSU Threshold':
+				tk.Scale(self.fltr_params, label='Threshold', from_=0, to=255, orient='horizontal', variable=self.param_otsu_thresh).pack()
+				tk.Scale(self.fltr_params, label='Max Value', from_=0, to=255, orient='horizontal', variable=self.param_otsu_max).pack()
+			elif filter=='Detection w/CNN':  pass #no params
+			elif filter=='Hist Equalization':pass #no params
+			elif filter=='Kmeans Clustering':
+				tk.Scale(self.fltr_params, label='K', from_=1, to=10, orient='horizontal', variable=self.param_kmeans_k).pack()
+			elif filter=='Corner Detection':
 				tk.Scale(self.fltr_params, label='Block Size',  from_=2, to=10, orient='horizontal', variable=self.param_harris_bsize).pack()
+				tk.Scale(self.fltr_params, label='Kernel Size', from_=1, to=9,   resolution=2,    orient='horizontal', variable=self.param_harris_ksize).pack()
 				tk.Scale(self.fltr_params, label='Kernel Size', from_=1, to=9,   resolution=2,    orient='horizontal', variable=self.param_harris_ksize).pack()
 				tk.Scale(self.fltr_params, label='k',           from_=0, to=0.1, resolution=0.01, orient='horizontal', variable=self.param_harris_k).pack()
 			else:
