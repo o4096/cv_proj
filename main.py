@@ -1,7 +1,6 @@
 import os, cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter     import filedialog
 from tkinter     import *
@@ -34,21 +33,14 @@ class Application:
 			'Normalize', 'Grayscale',
 			'Sharpen', 'Gaussian Blur',
 			'Hist Equalization',
-			'Hist Equalization',
 			'Edge Detection',
-			'Corner Detection', #Harris
 			'Corner Detection', #Harris
 			'SIFT keypoints',
 			'OTSU Threshold',
 			'Detection w/SIFT',
 			'Detection w/CNN',
 			'Kmeans Clustering',
-			'OTSU Threshold',
-			'Detection w/SIFT',
-			'Detection w/CNN',
-			'Kmeans Clustering',
 		]
-		self.model= load_model('chess.keras')
 
 	# INIT UI ELEMENTS (order doesn't affect element position)
 		self.canvas=            Canvas(root, bg='gray')
@@ -81,9 +73,6 @@ class Application:
 		self.param_harris_bsize=  IntVar(value=2)
 		self.param_harris_ksize=  IntVar(value=3)
 		self.param_harris_k=      DoubleVar(value=0.04)
-		self.param_otsu_thresh=   DoubleVar(value=0)
-		self.param_otsu_max=      DoubleVar(value=255)
-		self.param_kmeans_k=      IntVar(value=2)
 		self.param_otsu_thresh=   DoubleVar(value=0)
 		self.param_otsu_max=      DoubleVar(value=255)
 		self.param_kmeans_k=      IntVar(value=2)
@@ -140,14 +129,6 @@ class Application:
 			elif filter=='Hist Equalization':
 				r, g, b= cv2.split(img)
 				img= cv2.merge((cv2.equalizeHist(r), cv2.equalizeHist(g), cv2.equalizeHist(b)))
-			if   filter=='Sharpen':           img= cv2.filter2D(img, -1, self.param_sharpness.get()*np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]))
-			elif filter=='Gaussian Blur':     img= cv2.GaussianBlur(img, (5, 5), self.param_blur.get())
-			elif filter=='Edge Detection':    img= cv2.Canny(img, threshold1=self.param_canny_thresh1.get(), threshold2=self.param_canny_thresh2.get())
-			elif filter=='Normalize':         img= self.fltr_normalize(img)
-			elif filter=='Grayscale':         img= self.fltr_grayscale(img)
-			elif filter=='Hist Equalization':
-				r, g, b= cv2.split(img)
-				img= cv2.merge((cv2.equalizeHist(r), cv2.equalizeHist(g), cv2.equalizeHist(b)))
 			elif filter=='SIFT keypoints':
 				gray= self.fltr_grayscale(img)
 				gray= self.fltr_grayscale(img)
@@ -191,32 +172,6 @@ class Application:
 					bf= cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
 					matches= bf.match(descriptors1, descriptors2)
 					matches= sorted(matches, key=lambda x: x.distance)
-
-					# # # Filter matches using Lowe's ratio test (optional)
-					# good_matches= []
-					# for m in matches:
-					# 	if m.distance<0.75*np.mean([match.distance for match in matches]):
-					# 		good_matches.append(m)
-
-					# # # Extract location of good matches
-					# points_obj= np.zeros((len(matches), 2), dtype=np.float32)
-					# points_scn= np.zeros((len(matches), 2), dtype=np.float32)
-
-					for i, match in enumerate(matches):
-						points_obj[i, :]= keypoints1[match.queryIdx].pt
-						points_scn[i, :]= keypoints2[match.trainIdx].pt
-
-					# H, mask= cv2.findHomography(points_obj, points_scn, cv2.RANSAC)
-
-					# # # # Get the corners of the object image
-					# h, w= obj_img.shape[:2]
-					# obj_corners= np.array([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]], dtype='float32').reshape(-1, 1, 2)
-
-					# # # # Transform corners to the scene image
-					# scn_corners= cv2.perspectiveTransform(obj_corners, H)
-
-					# # # # Draw bounding box on the scene image
-					# img= cv2.polylines(img, [np.int32(scn_corners)], isClosed=True, color=(0, 255, 0), thickness=3)
 					if len(matches)>20:
 						img= cv2.drawMatches(img, keypoints1, obj_img, keypoints2, matches[:20], None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
 						img= cv2.putText(img, obj_image, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
@@ -225,7 +180,6 @@ class Application:
 				for x, y, w, h in faces:
 					crop= img[y:y+h, x:x+w]			        # crop the detected face
 					crop= cv2.resize(crop, IMG_SIZE[:2])		# resize the cropped image to fit input size
-					# crop= cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)	# convert color format to RGB
 					crop= crop/255					# normalize pixels to range between 0 and 1
 					crop= np.reshape(crop, [1, IMG_SIZE[0], IMG_SIZE[1], IMG_SIZE[2]])
 					preds= model.predict(crop)
@@ -238,41 +192,8 @@ class Application:
 						label= 'No Mask'
 						color= (255, 0, 0) #RED
 
-
-				# gray= self.fltr_grayscale(img)
-				# # blurred=     cv2.GaussianBlur(gray, (5, 5), 0) # Noise reduction
-				# # equalized=   cv2.equalizeHist(blurred)
-				# _, thresh=   cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-				# # kernel=      cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-				# # closed=      cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=2)
-				# contours, _= cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-				# for contour in contours:
-				# 	# area= cv2.contourArea(contour)
-				# 	# if area<1000 or area>1000000:
-				# 	# 	continue
-				# 	mask= np.zeros_like(gray)
-				# 	cv2.drawContours(mask, [contour], -1, 255, -1)
-				# 	x, y, w, h= cv2.boundingRect(contour)
-				# 	if w<50 or h<50 or w>1000 or h>1000:
-				# 		continue
-
-				# 	crop= cv2.resize(img[y:y+h, x:x+w], IMG_SIZE)
-				# 	crop= (crop/255).astype(np.float32)
-				# 	preds= self.model.predict(np.array([crop]))
-				# 	pred_idx= np.argmax(preds)
-				# 	label= LABELS[pred_idx]
 					img= cv2.putText(img, label, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 2, color, 4)
 					img= cv2.rectangle(img, (x, y), (x+w, y+h), color, thickness=4)
-
-				# mask= np.zeros_like(gray) #assume object has largest contour
-				# if contours:
-				# 	largest= max(contours, key=cv2.contourArea)
-				# 	cv2.drawContours(mask, [largest], -1, 255, -1)
-				# 	x, y, w, h= cv2.boundingRect(largest)
-
-				# masked= cv2.bitwise_and(img, img, mask=mask)
-				# img= self.fltr_normalize(masked)
-				# img= cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0))
 			elif filter=='Kmeans Clustering':
 				data= np.float32(img.reshape((-1, 3)))
 				criteria= (cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
@@ -280,7 +201,6 @@ class Application:
 				centers= np.uint8(centers)
 				segmented_data= centers[labels.flatten()]
 				img= segmented_data.reshape(img.shape)
-				# img= cv2.findChessboardCorners(img, (16, 16))
 			else:
 				return
 
@@ -312,17 +232,7 @@ class Application:
 			elif filter=='Normalize':        pass #no params
 			elif filter=='Grayscale':        pass #no params
 			elif filter=='SIFT keypoints':   pass #no params
-			elif filter=='SIFT keypoints':   pass #no params
-			elif filter=='SIFT keypoints':   pass #no params
 			elif filter=='Detection w/SIFT': pass #no params (use objects folder for reference object images)
-			elif filter=='OTSU Threshold':
-				tk.Scale(self.fltr_params, label='Threshold', from_=0, to=255, orient='horizontal', variable=self.param_otsu_thresh).pack()
-				tk.Scale(self.fltr_params, label='Max Value', from_=0, to=255, orient='horizontal', variable=self.param_otsu_max).pack()
-			elif filter=='Detection w/CNN':  pass #no params
-			elif filter=='Hist Equalization':pass #no params
-			elif filter=='Kmeans Clustering':
-				tk.Scale(self.fltr_params, label='K', from_=1, to=10, orient='horizontal', variable=self.param_kmeans_k).pack()
-			elif filter=='Corner Detection':
 			elif filter=='OTSU Threshold':
 				tk.Scale(self.fltr_params, label='Threshold', from_=0, to=255, orient='horizontal', variable=self.param_otsu_thresh).pack()
 				tk.Scale(self.fltr_params, label='Max Value', from_=0, to=255, orient='horizontal', variable=self.param_otsu_max).pack()
