@@ -33,7 +33,7 @@ class Application:
 			'Normalize', 'Grayscale',
 			'Sharpen', 'Gaussian Blur',
 			'Hist Equalization',
-			'Edge Detection',
+			'Edge Detection', #Canny
 			'Corner Detection', #Harris
 			'SIFT keypoints',
 			'OTSU Threshold',
@@ -150,13 +150,6 @@ class Application:
 				gray= self.fltr_grayscale(img)
 				f, thresh= cv2.threshold(gray, self.param_otsu_thresh.get(), self.param_otsu_max.get(), cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 				img= thresh
-			elif filter=='Corner Detection':
-				gray= self.fltr_grayscale(img)
-				harris_response= cv2.cornerHarris(gray, self.param_harris_bsize.get(), self.param_harris_ksize.get(), self.param_harris_k.get())
-				dilated_corners= cv2.dilate(harris_response, None)
-				threshold= 0.01*harris_response.max()
-				if len(img.shape)==3: img[dilated_corners>threshold]= [0, 255, 0]# Mark corners in green
-				else:                 img[dilated_corners>threshold]= 255
 			elif filter=='Detection w/SIFT':
 				scn_img= self.fltr_grayscale(img)
 				scn_img= self.fltr_grayscale(img)
@@ -181,7 +174,7 @@ class Application:
 					crop= img[y:y+h, x:x+w]			        # crop the detected face
 					crop= cv2.resize(crop, IMG_SIZE[:2])		# resize the cropped image to fit input size
 					crop= crop/255					# normalize pixels to range between 0 and 1
-					crop= np.reshape(crop, [1, IMG_SIZE[0], IMG_SIZE[1], IMG_SIZE[2]])
+					crop= np.reshape(crop, [1, IMG_SIZE[0], IMG_SIZE[1], IMG_SIZE[2]]) #reshape it into a single batch
 					preds= model.predict(crop)
 					print(f'{preds}', end='\r')
 
@@ -222,9 +215,7 @@ class Application:
 			self.applyb.config(state=NORMAL)
 			if   filter=='Sharpen':
 				tk.Scale(self.fltr_params, label='Sharpness', from_=0.1, to=10, resolution=0.1, orient='horizontal', variable=self.param_sharpness).pack()
-				tk.Scale(self.fltr_params, label='Sharpness', from_=0.1, to=10, resolution=0.1, orient='horizontal', variable=self.param_sharpness).pack()
 			elif filter=='Gaussian Blur':
-				tk.Scale(self.fltr_params, label='Sigma', from_=0.1, to=100, resolution=0.1, orient='horizontal', variable=self.param_blur).pack()
 				tk.Scale(self.fltr_params, label='Sigma', from_=0.1, to=100, resolution=0.1, orient='horizontal', variable=self.param_blur).pack()
 			elif filter=='Edge Detection':
 				tk.Scale(self.fltr_params, label='Thresh1', from_=0, to=512, orient='horizontal', variable=self.param_canny_thresh1).pack()
@@ -233,11 +224,11 @@ class Application:
 			elif filter=='Grayscale':        pass #no params
 			elif filter=='SIFT keypoints':   pass #no params
 			elif filter=='Detection w/SIFT': pass #no params (use objects folder for reference object images)
+			elif filter=='Detection w/CNN':  pass #no params
+			elif filter=='Hist Equalization':pass #no params
 			elif filter=='OTSU Threshold':
 				tk.Scale(self.fltr_params, label='Threshold', from_=0, to=255, orient='horizontal', variable=self.param_otsu_thresh).pack()
 				tk.Scale(self.fltr_params, label='Max Value', from_=0, to=255, orient='horizontal', variable=self.param_otsu_max).pack()
-			elif filter=='Detection w/CNN':  pass #no params
-			elif filter=='Hist Equalization':pass #no params
 			elif filter=='Kmeans Clustering':
 				tk.Scale(self.fltr_params, label='K', from_=1, to=10, orient='horizontal', variable=self.param_kmeans_k).pack()
 			elif filter=='Corner Detection':
